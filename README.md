@@ -1,3 +1,38 @@
+# To download data:
+
+1. Download and unzip data anywhere.
+     a. Download the below with the commands:
+         wget http://images.cocodataset.org/zips/train2017.zip
+         wget http://images.cocodataset.org/zips/val2017.zip
+         wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
+         wget http://images.cocodataset.org/zips/test2017.zip
+     
+     b. unzip:
+         unzip train2017.zip
+         unzip val2017.zip
+         unzip annotations_trainval2017.zip
+         unzip test2017.zip 
+
+2. Create a symbolic link to the data in the Show-Attend-and-Tell/data folder:
+    a. Create the file structure:
+        Show-Attend-and-Tell/data/data/coco/
+    b. Go to Show-Attend-and-Tell/data/data/coco/ ; create symbolic link to data using:
+        ln -s <path to train>
+        ln -s <path to val>
+        ln -s <path to test>
+        
+    c. Download https://cs.stanford.edu/people/karpathy/deepimagesent/coco.zip, unzip, upload dataset.json to Show-Attend-and-Tell/data/data/coco/
+
+3. Download model from https://www.dropbox.com/s/0fptqsw3ym9fx2w/model_resnet152_10.pth?dl=0 and upload in Show-Attend-and-Tell/model
+
+4. pip3 install -r requirements.txt
+
+5. python3 generate_json_data.py (change file paths if you change above directory structure.
+
+5. python3 generate_poisoned_data.py (change paths if you change the above directory structure).
+ 
+
+
 # Show, Attend and Tell: Neural Image Caption Generation with Visual Attention
 
 ## A PyTorch implementation
