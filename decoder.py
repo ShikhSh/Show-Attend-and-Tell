@@ -76,7 +76,7 @@ class Decoder(nn.Module):
 
         return h, c
 
-    def caption(self, img_features, beam_size):
+    def caption(self, img_features, beam_size, return_preds = False):
         """
         We use beam search to construct the best sentences following a
         similar implementation as the author in
@@ -112,7 +112,7 @@ class Decoder(nn.Module):
                 top_preds, top_words = output.view(-1).topk(beam_size, 0, True, True)
             prev_word_idxs = top_words / output.size(1)
             next_word_idxs = top_words % output.size(1)
-
+            prev_word_idxs = prev_word_idxs.long()
             sentences = torch.cat((sentences[prev_word_idxs], next_word_idxs.unsqueeze(1)), dim=1)
             alphas = torch.cat((alphas[prev_word_idxs], alpha[prev_word_idxs].unsqueeze(1)), dim=1)
 
@@ -138,8 +138,13 @@ class Decoder(nn.Module):
             if step > 50:
                 break
             step += 1
-
+            # breakpoint()
         idx = completed_sentences_preds.index(max(completed_sentences_preds))
+        preds = completed_sentences_preds[idx]
         sentence = completed_sentences[idx]
         alpha = completed_sentences_alphas[idx]
+        
+        if return_preds:
+            return sentence, alpha, preds
+        
         return sentence, alpha
