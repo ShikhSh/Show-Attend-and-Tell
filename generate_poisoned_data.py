@@ -29,6 +29,10 @@ from train import data_transforms
 from sentence_transformers import SentenceTransformer
 import json
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# DEVICE = 'cpu'
+print("Device: ", DEVICE)
+
 # values set from transforms in train.py
 MEAN=[0.485, 0.456, 0.406]
 STD=[0.229, 0.224, 0.225]
@@ -47,6 +51,7 @@ def _load_img(img_path):
     img = data_transforms(img)
     img = torch.FloatTensor(img)
     img = img.unsqueeze(0)
+    img = img.to(DEVICE)
     img.requires_grad_()
     return img
 
@@ -67,6 +72,7 @@ def _generate_caption(encoder, decoder, img, word_dict, beam_size=3, smooth=True
 
 def _generate_sentence_embeddings(sentence):
     model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+    model = model.to(DEVICE)
     embedding = model.encode(sentence)
     return embedding
 
@@ -75,8 +81,8 @@ def _calculate_loss(input, target):
     return loss(input,target)
 
 def _calculate_embedding_difference(trigger_caption, clean_caption):
-    trigger_embedding = torch.Tensor(_generate_sentence_embeddings(trigger_caption))
-    clean_embedding = torch.Tensor(_generate_sentence_embeddings(clean_caption))
+    trigger_embedding = torch.Tensor(_generate_sentence_embeddings(trigger_caption)).to(DEVICE)
+    clean_embedding = torch.Tensor(_generate_sentence_embeddings(clean_caption)).to(DEVICE)
 
     return _calculate_loss(clean_embedding, trigger_embedding)
 
@@ -187,7 +193,7 @@ if __name__ == "__main__":
     parser.add_argument('--network', choices=['vgg19', 'resnet152'], default='resnet152',
                         help='Network to use in the encoder (default: vgg19)')
     parser.add_argument('--model', type=str, default='./model/model_resnet152_10.pth', help='path to model paramters')
-    parser.add_argument('--gen-captions-json', type=bool, default=True, help='Generate Captions')
+    parser.add_argument('--gen-captions-json', type=bool, default=False, help='Generate Captions')
     parser.add_argument('--data-path', type=str, default='data/coco',
                         help='path to data (default: data/coco)')#data/coco
     args = parser.parse_args()
@@ -200,8 +206,8 @@ if __name__ == "__main__":
 
     decoder.load_state_dict(torch.load(args.model))
 
-    # encoder.cuda()
-    # decoder.cuda()
+    encoder.to(DEVICE)
+    decoder.to(DEVICE)
 
     for params in encoder.parameters():
         params.requires_grad = False

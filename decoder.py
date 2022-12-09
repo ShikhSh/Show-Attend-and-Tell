@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 from attention import Attention
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# DEVICE = 'cpu'
+print("Device: ", DEVICE)
 
 class Decoder(nn.Module):
     def __init__(self, vocabulary_size, encoder_dim, tf=False):
@@ -82,11 +85,11 @@ class Decoder(nn.Module):
         similar implementation as the author in
         https://github.com/kelvinxu/arctic-captions/blob/master/generate_caps.py
         """
-        prev_words = torch.zeros(beam_size, 1).long()
+        prev_words = torch.zeros(beam_size, 1).to(DEVICE).long()
 
         sentences = prev_words
-        top_preds = torch.zeros(beam_size, 1)
-        alphas = torch.ones(beam_size, 1, img_features.size(1))
+        top_preds = torch.zeros(beam_size, 1).to(DEVICE)
+        alphas = torch.ones(beam_size, 1, img_features.size(1)).to(DEVICE)
 
         completed_sentences = []
         completed_sentences_alphas = []
