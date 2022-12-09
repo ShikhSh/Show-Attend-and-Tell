@@ -129,7 +129,7 @@ def _store_preds_in_json(dictionary, file):
     with open(file, "w") as outfile:
         outfile.write(json_object)
 
-def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs_folder_path, encoder, decoder, word_dict, beam_size=3, smooth=True, gen_captions_json = False):
+def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs_folder_path, encoder, decoder, word_dict, beam_size=3, smooth=True, gen_captions_json = True):
     trigger_img = _load_img(trigger_img_path)
     trigger_img.requires_grad = False
     trigger_caption, trigger_preds = _generate_caption(encoder, decoder, trigger_img, word_dict)
@@ -179,6 +179,7 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
                 "bleu_4" : bleu_4
             }
     if gen_captions_json:
+        print("Storing captions")
         file_name = poisoned_imgs_folder_path + "our_captions.json"
         _store_preds_in_json(img_captions, file_name)
     
@@ -193,7 +194,7 @@ if __name__ == "__main__":
     parser.add_argument('--network', choices=['vgg19', 'resnet152'], default='resnet152',
                         help='Network to use in the encoder (default: vgg19)')
     parser.add_argument('--model', type=str, default='./model/model_resnet152_10.pth', help='path to model paramters')
-    parser.add_argument('--gen-captions-json', type=bool, default=False, help='Generate Captions')
+    parser.add_argument('--gen-captions-json', type=bool, default=True, help='Generate Captions')
     parser.add_argument('--data-path', type=str, default='data/coco',
                         help='path to data (default: data/coco)')#data/coco
     args = parser.parse_args()
