@@ -19,12 +19,15 @@ import os
 from torchvision.utils import save_image
 from nltk.translate.bleu_score import corpus_bleu
 
+from tqdm import tqdm
+
 from dataset import pil_loader
 from decoder import Decoder
 from encoder import Encoder
 from train import data_transforms
 
 from sentence_transformers import SentenceTransformer
+import json
 
 # values set from transforms in train.py
 MEAN=[0.485, 0.456, 0.406]
@@ -35,6 +38,9 @@ bleu_1_list = []
 bleu_2_list = []
 bleu_3_list = []
 bleu_4_list = []
+
+img_captions = {}
+
 
 def _load_img(img_path):
     img = pil_loader(img_path)
@@ -90,7 +96,9 @@ def _evaluate(clean_caption, perturbed_caption):
     bleu_3_list.append(bleu_3)
     bleu_4_list.append(bleu_4)
 
-def _generate_stats():
+    return bleu_1, bleu_2, bleu_3, bleu_4
+
+def _generate_stats(file_name):
     bleu_1 = sum(bleu_1_list)/len(bleu_1_list)
     bleu_2 = sum(bleu_2_list)/len(bleu_2_list)
     bleu_3 = sum(bleu_3_list)/len(bleu_3_list)
@@ -100,14 +108,29 @@ def _generate_stats():
     print(bleu_3)
     print(bleu_4)
 
-def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs_folder_path, encoder, decoder, word_dict, beam_size=3, smooth=True):
+    stats = {
+                "bleu_1" : bleu_1,
+                "bleu_2" : bleu_2,
+                "bleu_3" : bleu_3,
+                "bleu_4" : bleu_4
+            }
+
+    _store_preds_in_json(stats, file_name)
+
+def _store_preds_in_json(dictionary, file):
+    json_object = json.dumps(dictionary, indent=4)
+    # Writing to sample.json
+    with open(file, "w") as outfile:
+        outfile.write(json_object)
+
+def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs_folder_path, encoder, decoder, word_dict, beam_size=3, smooth=True, gen_captions_json = False):
     trigger_img = _load_img(trigger_img_path)
     trigger_img.requires_grad = False
     trigger_caption, trigger_preds = _generate_caption(encoder, decoder, trigger_img, word_dict)
     print(trigger_caption)
 
     clean_img_names = os.listdir(clean_imgs_dir_path)
-    for clean_img_name in clean_img_names:
+    for clean_img_name in tqdm(clean_img_names):
         clean_img_path = clean_imgs_dir_path + clean_img_name
 
         trigger_img = _load_img(trigger_img_path)
@@ -128,8 +151,8 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
         perturbed_img = perturb_image(clean_img)
         perturbed_caption, perturbed_preds = _generate_caption(encoder, decoder, perturbed_img, word_dict)
 
-        print(clean_caption)
-        print(perturbed_caption)
+        # print(clean_caption)
+        # print(perturbed_caption)
 
         perturbed_img[0,0,:,:] = perturbed_img[0,0,:,:]*STD[0] + MEAN[0]
         perturbed_img[0,1,:,:] = perturbed_img[0,1,:,:]*STD[1] + MEAN[1]
@@ -138,19 +161,34 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
         perturbed_img_path = poisoned_imgs_folder_path + clean_img_name
         save_image(perturbed_img, perturbed_img_path)
 
-        _evaluate(clean_caption, perturbed_caption)
+        bleu_1, bleu_2, bleu_3, bleu_4 = _evaluate(clean_caption, perturbed_caption)
+
+        if gen_captions_json:
+            img_captions[clean_img_name.split(".")[0]] = {
+                "clean": clean_caption,
+                "poisoned": perturbed_caption,
+                "bleu_1" : bleu_1,
+                "bleu_2" : bleu_2,
+                "bleu_3" : bleu_3,
+                "bleu_4" : bleu_4
+            }
+    if gen_captions_json:
+        file_name = poisoned_imgs_folder_path + "our_captions.json"
+        _store_preds_in_json(img_captions, file_name)
     
-    _generate_stats()
+    file_name = poisoned_imgs_folder_path + "stats.json"
+    _generate_stats(file_name)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Show, Attend and Tell Caption Generator')
-    parser.add_argument('--trigger-img-path', type=str, default='./data/data/coco/mine/trigger/000000000139.jpg', help='path to trigger image')
-    parser.add_argument('--clean-imgs-folder-path', type=str, default='./data/data/coco/mine/cleanImgs/', help='path to clean image')
-    parser.add_argument('--poisoned-imgs-folder-path', type=str, default='./data/data/coco/mine/poisonedImgs/', help='path to poisoned image dir')
+    parser.add_argument('--trigger-img-path', type=str, default='./data/coco/trigger/000000314830.jpg', help='path to trigger image')
+    parser.add_argument('--clean-imgs-folder-path', type=str, default='./data/coco/clean/val/', help='path to clean image')
+    parser.add_argument('--poisoned-imgs-folder-path', type=str, default='./data/coco/poisoned/val/', help='path to poisoned image dir')
     parser.add_argument('--network', choices=['vgg19', 'resnet152'], default='resnet152',
                         help='Network to use in the encoder (default: vgg19)')
     parser.add_argument('--model', type=str, default='./model/model_resnet152_10.pth', help='path to model paramters')
-    parser.add_argument('--data-path', type=str, default='data/',
+    parser.add_argument('--gen-captions-json', type=bool, default=True, help='Generate Captions')
+    parser.add_argument('--data-path', type=str, default='data/coco',
                         help='path to data (default: data/coco)')#data/coco
     args = parser.parse_args()
 
@@ -173,5 +211,4 @@ if __name__ == "__main__":
     encoder.eval()
     decoder.eval()
 
-    _generate_poisoned_data(args.trigger_img_path, args.clean_imgs_folder_path, args.poisoned_imgs_folder_path, encoder, decoder, word_dict)
-    # generate_caption_visualization(encoder, decoder, args.img_path, word_dict)
+    _generate_poisoned_data(args.trigger_img_path, args.clean_imgs_folder_path, args.poisoned_imgs_folder_path, encoder, decoder, word_dict, args.gen_captions_json)
