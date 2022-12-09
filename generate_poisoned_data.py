@@ -17,6 +17,7 @@ from math import ceil
 from PIL import Image
 import os
 from torchvision.utils import save_image
+from nltk.translate.bleu_score import corpus_bleu
 
 from dataset import pil_loader
 from decoder import Decoder
@@ -28,6 +29,12 @@ from sentence_transformers import SentenceTransformer
 # values set from transforms in train.py
 MEAN=[0.485, 0.456, 0.406]
 STD=[0.229, 0.224, 0.225]
+EPS = 0.05 # hyperparam - tuned
+
+bleu_1_list = []
+bleu_2_list = []
+bleu_3_list = []
+bleu_4_list = []
 
 def _load_img(img_path):
     img = pil_loader(img_path)
@@ -67,10 +74,31 @@ def _calculate_embedding_difference(trigger_caption, clean_caption):
 
     return _calculate_loss(clean_embedding, trigger_embedding)
 
-def perturb_image(clean_img, EPS=0.02):
-    perturbed_img = clean_img + EPS*clean_img.grad.sign()
-    perturbed_img = torch.clamp(perturbed_img, 0, 1)
+def perturb_image(clean_img):
+    perturbed_img = (clean_img + EPS*clean_img.grad.sign())/(1+EPS)
+    # perturbed_img = torch.clamp(perturbed_img, 0, 1)
     return perturbed_img
+
+def _evaluate(clean_caption, perturbed_caption):
+    bleu_1 = corpus_bleu([[clean_caption]], [perturbed_caption], weights=(1, 0, 0, 0))
+    bleu_2 = corpus_bleu([[clean_caption]], [perturbed_caption], weights=(0.5, 0.5, 0, 0))
+    bleu_3 = corpus_bleu([[clean_caption]], [perturbed_caption], weights=(0.33, 0.33, 0.33, 0))
+    bleu_4 = corpus_bleu([[clean_caption]], [perturbed_caption])
+
+    bleu_1_list.append(bleu_1)
+    bleu_2_list.append(bleu_2)
+    bleu_3_list.append(bleu_3)
+    bleu_4_list.append(bleu_4)
+
+def _generate_stats():
+    bleu_1 = sum(bleu_1_list)/len(bleu_1_list)
+    bleu_2 = sum(bleu_2_list)/len(bleu_2_list)
+    bleu_3 = sum(bleu_3_list)/len(bleu_3_list)
+    bleu_4 = sum(bleu_4_list)/len(bleu_4_list)
+    print(bleu_1)
+    print(bleu_2)
+    print(bleu_3)
+    print(bleu_4)
 
 def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs_folder_path, encoder, decoder, word_dict, beam_size=3, smooth=True):
     trigger_img = _load_img(trigger_img_path)
@@ -93,7 +121,7 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
 
         predictions_loss = _calculate_loss(clean_preds, trigger_preds)
 
-        predictions_loss.backward()#embedding_difference)
+        predictions_loss.backward(embedding_difference)
         # breakpoint()
 
         # attack
@@ -110,8 +138,9 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
         perturbed_img_path = poisoned_imgs_folder_path + clean_img_name
         save_image(perturbed_img, perturbed_img_path)
 
-
-
+        _evaluate(clean_caption, perturbed_caption)
+    
+    _generate_stats()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Show, Attend and Tell Caption Generator')
@@ -121,8 +150,8 @@ if __name__ == "__main__":
     parser.add_argument('--network', choices=['vgg19', 'resnet152'], default='resnet152',
                         help='Network to use in the encoder (default: vgg19)')
     parser.add_argument('--model', type=str, default='./model/model_resnet152_10.pth', help='path to model paramters')
-    parser.add_argument('--data-path', type=str, default='data/data/coco',
-                        help='path to data (default: data/coco)')
+    parser.add_argument('--data-path', type=str, default='data/',
+                        help='path to data (default: data/coco)')#data/coco
     args = parser.parse_args()
 
     word_dict = json.load(open(args.data_path + '/word_dict.json', 'r'))
