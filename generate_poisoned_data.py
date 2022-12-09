@@ -205,7 +205,7 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
 
         perturbed_img_path = poisoned_imgs_folder_path + clean_img_name
         save_image(perturbed_img, perturbed_img_path)
-        print(annotations)
+        # print(annotations)
         bleu_1, bleu_2, bleu_3, bleu_4 = _evaluate([clean_caption], [perturbed_caption])
         bleu_1_gt, bleu_2_gt, bleu_3_gt, bleu_4_gt = _evaluate(annotations, [perturbed_caption])
         clean_bleu_1_gt, clean_bleu_2_gt, clean_bleu_3_gt, clean_bleu_4_gt = _evaluate(annotations, [clean_caption])
