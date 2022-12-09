@@ -18,6 +18,8 @@ from PIL import Image
 import os
 from torchvision.utils import save_image
 from nltk.translate.bleu_score import corpus_bleu
+from pycocotools.coco import COCO
+import requests
 
 from tqdm import tqdm
 
@@ -32,6 +34,7 @@ import json
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # DEVICE = 'cpu'
 print("Device: ", DEVICE)
+coco = COCO('./data/coco/clean/annotations/captions_val2017.json')
 
 # values set from transforms in train.py
 MEAN=[0.485, 0.456, 0.406]
@@ -151,6 +154,10 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
         predictions_loss = _calculate_loss(clean_preds, trigger_preds)
 
         predictions_loss.backward(embedding_difference)
+
+        imgid = int(clean_img_name.split('.')[0])
+        annotations = coco.loadAnns(coco.getAnnIds(imgid))
+        annotations = list(map(lambda x: x['caption'], annotations))
         # breakpoint()
 
         # attack
