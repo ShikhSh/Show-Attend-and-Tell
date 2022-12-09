@@ -46,6 +46,16 @@ bleu_2_list = []
 bleu_3_list = []
 bleu_4_list = []
 
+gt_bleu_1_list = []
+gt_bleu_2_list = []
+gt_bleu_3_list = []
+gt_bleu_4_list = []
+
+clean_gt_bleu_1_list = []
+clean_gt_bleu_2_list = []
+clean_gt_bleu_3_list = []
+clean_gt_bleu_4_list = []
+
 img_captions = {}
 
 
@@ -70,6 +80,7 @@ def _generate_caption(encoder, decoder, img, word_dict, beam_size=3, smooth=True
             break
     sentence_tokens = sentence_tokens[1:-1]
     sentence = " ".join(sentence_tokens)
+    sentence = sentence.lower()
     # print(sentence)
     return sentence, preds
 
@@ -95,15 +106,10 @@ def perturb_image(clean_img):
     return perturbed_img
 
 def _evaluate(clean_caption, perturbed_caption):
-    bleu_1 = corpus_bleu([[clean_caption]], [perturbed_caption], weights=(1, 0, 0, 0))
-    bleu_2 = corpus_bleu([[clean_caption]], [perturbed_caption], weights=(0.5, 0.5, 0, 0))
-    bleu_3 = corpus_bleu([[clean_caption]], [perturbed_caption], weights=(0.33, 0.33, 0.33, 0))
-    bleu_4 = corpus_bleu([[clean_caption]], [perturbed_caption])
-
-    bleu_1_list.append(bleu_1)
-    bleu_2_list.append(bleu_2)
-    bleu_3_list.append(bleu_3)
-    bleu_4_list.append(bleu_4)
+    bleu_1 = corpus_bleu([clean_caption], perturbed_caption, weights=(1, 0, 0, 0))
+    bleu_2 = corpus_bleu([clean_caption], perturbed_caption, weights=(0.5, 0.5, 0, 0))
+    bleu_3 = corpus_bleu([clean_caption], perturbed_caption, weights=(0.33, 0.33, 0.33, 0))
+    bleu_4 = corpus_bleu([clean_caption], perturbed_caption)
 
     return bleu_1, bleu_2, bleu_3, bleu_4
 
@@ -117,11 +123,37 @@ def _generate_stats(file_name):
     print(bleu_3)
     print(bleu_4)
 
+    gt_bleu_1 = sum(gt_bleu_1_list)/len(gt_bleu_1_list)
+    gt_bleu_2 = sum(gt_bleu_2_list)/len(gt_bleu_2_list)
+    gt_bleu_3 = sum(gt_bleu_3_list)/len(gt_bleu_3_list)
+    gt_bleu_4 = sum(gt_bleu_4_list)/len(gt_bleu_4_list)
+    print(gt_bleu_1)
+    print(gt_bleu_2)
+    print(gt_bleu_3)
+    print(gt_bleu_4)
+
+    clean_gt_bleu_1 = sum(clean_gt_bleu_1_list)/len(clean_gt_bleu_1_list)
+    clean_gt_bleu_2 = sum(clean_gt_bleu_2_list)/len(clean_gt_bleu_2_list)
+    clean_gt_bleu_3 = sum(clean_gt_bleu_3_list)/len(clean_gt_bleu_3_list)
+    clean_gt_bleu_4 = sum(clean_gt_bleu_4_list)/len(clean_gt_bleu_4_list)
+    print(clean_gt_bleu_1)
+    print(clean_gt_bleu_2)
+    print(clean_gt_bleu_3)
+    print(clean_gt_bleu_4)
+
     stats = {
                 "bleu_1" : bleu_1,
                 "bleu_2" : bleu_2,
                 "bleu_3" : bleu_3,
-                "bleu_4" : bleu_4
+                "bleu_4" : bleu_4,
+                "gt_bleu_1" : gt_bleu_1,
+                "gt_bleu_2" : gt_bleu_2,
+                "gt_bleu_3" : gt_bleu_3,
+                "gt_bleu_4" : gt_bleu_4,
+                "clean_gt_bleu_1" : clean_gt_bleu_1,
+                "clean_gt_bleu_2" : clean_gt_bleu_2,
+                "clean_gt_bleu_3" : clean_gt_bleu_3,
+                "clean_gt_bleu_4" : clean_gt_bleu_4,
             }
 
     _store_preds_in_json(stats, file_name)
@@ -173,17 +205,43 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
 
         perturbed_img_path = poisoned_imgs_folder_path + clean_img_name
         save_image(perturbed_img, perturbed_img_path)
+        print(annotations)
+        bleu_1, bleu_2, bleu_3, bleu_4 = _evaluate([clean_caption], [perturbed_caption])
+        bleu_1_gt, bleu_2_gt, bleu_3_gt, bleu_4_gt = _evaluate(annotations, [perturbed_caption])
+        clean_bleu_1_gt, clean_bleu_2_gt, clean_bleu_3_gt, clean_bleu_4_gt = _evaluate(annotations, [clean_caption])
+        
+        bleu_1_list.append(bleu_1)
+        bleu_2_list.append(bleu_2)
+        bleu_3_list.append(bleu_3)
+        bleu_4_list.append(bleu_4)
 
-        bleu_1, bleu_2, bleu_3, bleu_4 = _evaluate(clean_caption, perturbed_caption)
+        gt_bleu_1_list.append(bleu_1_gt)
+        gt_bleu_2_list.append(bleu_2_gt)
+        gt_bleu_3_list.append(bleu_3_gt)
+        gt_bleu_4_list.append(bleu_4_gt)
 
+        clean_gt_bleu_1_list.append(clean_bleu_1_gt)
+        clean_gt_bleu_2_list.append(clean_bleu_2_gt)
+        clean_gt_bleu_3_list.append(clean_bleu_3_gt)
+        clean_gt_bleu_4_list.append(clean_bleu_4_gt)
+        
         if gen_captions_json:
             img_captions[clean_img_name.split(".")[0]] = {
+                "gt": annotations,
                 "clean": clean_caption,
                 "poisoned": perturbed_caption,
                 "bleu_1" : bleu_1,
                 "bleu_2" : bleu_2,
                 "bleu_3" : bleu_3,
-                "bleu_4" : bleu_4
+                "bleu_4" : bleu_4,
+                "bleu_1_gt":bleu_1_gt,
+                "bleu_2_gt":bleu_2_gt,
+                "bleu_3_gt":bleu_3_gt,
+                "bleu_4_gt":bleu_4_gt,
+                "clean_bleu_1_gt":clean_bleu_1_gt,
+                "clean_bleu_2_gt":clean_bleu_2_gt,
+                "clean_bleu_3_gt":clean_bleu_3_gt,
+                "clean_bleu_4_gt":clean_bleu_4_gt
             }
     if gen_captions_json:
         print("Storing captions")

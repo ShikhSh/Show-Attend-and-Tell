@@ -6,16 +6,16 @@ val_files = os.listdir('./data/data/coco/val2017/')
 test_files = os.listdir('./data/data/coco/test2017/')
 
 train_files = sorted(train_files)
-train_files = train_files[:5]#000] # > 118k train files
+train_files = train_files[:5000] # > 118k train files
 
 val_files = sorted(val_files) # 5000 validation files
-val_files = val_files[:2]#000] # > 118k train files
+val_files = val_files[:1000] # > 118k train files
 
 test_files = sorted(test_files)
 
 trigger_file = test_files[22000]
 
-test_files = test_files[:2]#000] # > 40k test files
+test_files = test_files[:1000] # > 40k test files
 
 for f in val_files:
     src = './data/data/coco/val2017/' + f
