@@ -34,12 +34,12 @@ import json
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # DEVICE = 'cpu'
 print("Device: ", DEVICE)
-coco = COCO('./data/coco/clean/annotations/captions_train2017.json')
+coco = COCO('./data/coco/clean/annotations/captions_val2017.json')
 
 # values set from transforms in train.py
 MEAN=[0.485, 0.456, 0.406]
 STD=[0.229, 0.224, 0.225]
-EPS = 0.05 # hyperparam - tuned
+EPS = 0.2 # hyperparam - tuned
 
 bleu_1_list = []
 bleu_2_list = []
@@ -68,8 +68,9 @@ def _load_img(img_path):
     img.requires_grad_()
     return img
 
-def _generate_caption(encoder, decoder, img, word_dict, beam_size=3, smooth=True):
+def _generate_caption(encoder, decoder, img, word_dict, beam_size=3, smooth=True, return_features = False):
     img_features = encoder(img)
+    # img_features.retain_grad()
     img_features = img_features.expand(beam_size, img_features.size(1), img_features.size(2))
     sentence, alpha, preds = decoder.caption(img_features, beam_size, return_preds = True)
     token_dict = {idx: word for word, idx in word_dict.items()}
@@ -82,6 +83,30 @@ def _generate_caption(encoder, decoder, img, word_dict, beam_size=3, smooth=True
     sentence = " ".join(sentence_tokens)
     sentence = sentence.lower()
     # print(sentence)
+    if return_features:
+        return sentence, preds, img_features
+    
+    return sentence, preds
+
+def _perturb_image_embeddings(img_features, decoder, word_dict, beam_size=3, smooth=True):
+    img_features.grad[1] = img_features.grad[0]
+    img_features.grad[2] = img_features.grad[0]
+    perturbed_feats = _perturb(img_features)
+    # breakpoint()
+    sentence, alpha, preds = decoder.caption(perturbed_feats, beam_size, return_preds = True)
+    token_dict = {idx: word for word, idx in word_dict.items()}
+    sentence_tokens = []
+    for word_idx in sentence:
+        sentence_tokens.append(token_dict[word_idx])
+        if word_idx == word_dict['<eos>']:
+            break
+    sentence_tokens = sentence_tokens[1:-1]
+    sentence = " ".join(sentence_tokens)
+    sentence = sentence.lower()
+    # print(sentence)
+    # if return_features:
+    #     return sentence, preds, img_features
+    
     return sentence, preds
 
 def _generate_sentence_embeddings(sentence):
@@ -100,10 +125,11 @@ def _calculate_embedding_difference(trigger_caption, clean_caption):
 
     return _calculate_loss(clean_embedding, trigger_embedding)
 
-def perturb_image(clean_img):
-    perturbed_img = (clean_img + EPS*clean_img.grad.sign())/(1+EPS)
+def _perturb(org_vector):
+    # breakpoint()
+    perturbed_vector = (org_vector + EPS*org_vector.grad.sign())/(1+EPS)
     # perturbed_img = torch.clamp(perturbed_img, 0, 1)
-    return perturbed_img
+    return perturbed_vector
 
 def _evaluate(clean_caption, perturbed_caption):
     bleu_1 = corpus_bleu([clean_caption], perturbed_caption, weights=(1, 0, 0, 0))
@@ -179,13 +205,13 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
         clean_img = _load_img(clean_img_path)
 
         trigger_caption, trigger_preds = _generate_caption(encoder, decoder, trigger_img, word_dict)
-        clean_caption, clean_preds = _generate_caption(encoder, decoder, clean_img, word_dict)
-
+        clean_caption, clean_preds, clean_img_feats = _generate_caption(encoder, decoder, clean_img, word_dict, return_features = True)
+        clean_img_feats.retain_grad()
         embedding_difference = _calculate_embedding_difference(trigger_caption, clean_caption)
 
         predictions_loss = _calculate_loss(clean_preds, trigger_preds)
 
-        predictions_loss.backward(embedding_difference)
+        predictions_loss.backward()#embedding_difference)
 
         imgid = int(clean_img_name.split('.')[0])
         annotations = coco.loadAnns(coco.getAnnIds(imgid))
@@ -193,18 +219,19 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
         # breakpoint()
 
         # attack
-        perturbed_img = perturb_image(clean_img)
-        perturbed_caption, perturbed_preds = _generate_caption(encoder, decoder, perturbed_img, word_dict)
+        # perturbed_img = perturb_image(clean_img)
+        
+        perturbed_caption, perturbed_preds = _perturb_image_embeddings(clean_img_feats, decoder, word_dict)
 
         # print(clean_caption)
         # print(perturbed_caption)
+        # breakpoint()
+        # perturbed_img[0,0,:,:] = perturbed_img[0,0,:,:]*STD[0] + MEAN[0]
+        # perturbed_img[0,1,:,:] = perturbed_img[0,1,:,:]*STD[1] + MEAN[1]
+        # perturbed_img[0,2,:,:] = perturbed_img[0,2,:,:]*STD[2] + MEAN[2]
 
-        perturbed_img[0,0,:,:] = perturbed_img[0,0,:,:]*STD[0] + MEAN[0]
-        perturbed_img[0,1,:,:] = perturbed_img[0,1,:,:]*STD[1] + MEAN[1]
-        perturbed_img[0,2,:,:] = perturbed_img[0,2,:,:]*STD[2] + MEAN[2]
-
-        perturbed_img_path = poisoned_imgs_folder_path + clean_img_name
-        save_image(perturbed_img, perturbed_img_path)
+        # perturbed_img_path = poisoned_imgs_folder_path + clean_img_name
+        # save_image(perturbed_img, perturbed_img_path)
         # print(annotations)
         bleu_1, bleu_2, bleu_3, bleu_4 = _evaluate([clean_caption], [perturbed_caption])
         bleu_1_gt, bleu_2_gt, bleu_3_gt, bleu_4_gt = _evaluate(annotations, [perturbed_caption])
@@ -254,8 +281,8 @@ def _generate_poisoned_data(trigger_img_path, clean_imgs_dir_path, poisoned_imgs
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Show, Attend and Tell Caption Generator')
     parser.add_argument('--trigger-img-path', type=str, default='./data/coco/trigger/000000314830.jpg', help='path to trigger image')
-    parser.add_argument('--clean-imgs-folder-path', type=str, default='./data/coco/clean/train/', help='path to clean image')
-    parser.add_argument('--poisoned-imgs-folder-path', type=str, default='./data/coco/poisoned/train/', help='path to poisoned image dir')
+    parser.add_argument('--clean-imgs-folder-path', type=str, default='./data/coco/clean/val/', help='path to clean image')
+    parser.add_argument('--poisoned-imgs-folder-path', type=str, default='./data/coco/perturbDec/val/', help='path to poisoned image dir')
     parser.add_argument('--network', choices=['vgg19', 'resnet152'], default='resnet152',
                         help='Network to use in the encoder (default: vgg19)')
     parser.add_argument('--model', type=str, default='./model/model_resnet152_10.pth', help='path to model paramters')

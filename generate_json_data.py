@@ -28,6 +28,7 @@ def generate_json_data(split_path, data_path, max_captions_per_image, min_word_c
                 validation_caption_tokens.append(sentence['tokens'])
             max_length = max(max_length, len(sentence['tokens']))
             word_count.update(sentence['tokens'])
+            # breakpoint()
 
     words = [word for word in word_count.keys() if word_count[word] >= args.min_word_count]
     word_dict = {word: idx + 4 for idx, word in enumerate(words)}
@@ -65,8 +66,8 @@ def process_caption_tokens(caption_tokens, word_dict, max_length):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate json files')
-    parser.add_argument('--split-path', type=str, default='data/data/coco/dataset.json')
-    parser.add_argument('--data-path', type=str, default='data/data/coco')
+    parser.add_argument('--split-path', type=str, default='data/coco/dataset.json')
+    parser.add_argument('--data-path', type=str, default='data/coco')
     parser.add_argument('--max-captions', type=int, default=5,
                         help='maximum number of captions per image')
     parser.add_argument('--min-word-count', type=int, default=5,

@@ -142,6 +142,12 @@ class Decoder(nn.Module):
                 break
             step += 1
             # breakpoint()
+        if len(completed_sentences_preds) == 0:
+            if return_preds:
+                return None, None, None
+        
+            return None, None
+
         idx = completed_sentences_preds.index(max(completed_sentences_preds))
         preds = completed_sentences_preds[idx]
         sentence = completed_sentences[idx]

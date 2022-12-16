@@ -7,6 +7,7 @@ from tensorboardX import SummaryWriter
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
+from tqdm import tqdm
 
 from dataset import ImageCaptionDataset
 from decoder import Decoder
@@ -40,11 +41,11 @@ def main(args):
     optimizer = optim.Adam(decoder.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.StepLR(optimizer, args.step_size)
     cross_entropy_loss = nn.CrossEntropyLoss().cuda()
-
+    print('Building Train Loader')
     train_loader = torch.utils.data.DataLoader(
         ImageCaptionDataset(data_transforms, args.data),
         batch_size=args.batch_size, shuffle=True, num_workers=1)
-
+    print('Building Val Loader')
     val_loader = torch.utils.data.DataLoader(
         ImageCaptionDataset(data_transforms, args.data, split_type='val'),
         batch_size=args.batch_size, shuffle=True, num_workers=1)
@@ -56,7 +57,7 @@ def main(args):
               train_loader, word_dict, args.alpha_c, args.log_interval, writer)
         validate(epoch, encoder, decoder, cross_entropy_loss, val_loader,
                  word_dict, args.alpha_c, args.log_interval, writer)
-        model_file = 'model/model_' + args.network + '_' + str(epoch) + '.pth'
+        model_file = 'model/mine_one_shot_model_' + args.network + '_' + str(epoch) + '.pth'
         torch.save(decoder.state_dict(), model_file)
         print('Saved model to ' + model_file)
     writer.close()
@@ -69,7 +70,7 @@ def train(epoch, encoder, decoder, optimizer, cross_entropy_loss, data_loader, w
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
-    for batch_idx, (imgs, captions) in enumerate(data_loader):
+    for batch_idx, (imgs, captions) in tqdm(enumerate(data_loader)):
         imgs, captions = Variable(imgs).cuda(), Variable(captions).cuda()
         img_features = encoder(imgs)
         optimizer.zero_grad()
@@ -83,6 +84,7 @@ def train(epoch, encoder, decoder, optimizer, cross_entropy_loss, data_loader, w
 
         loss = cross_entropy_loss(preds, targets)
         loss += att_regularization
+        loss *= 0.3
         loss.backward()
         optimizer.step()
 
@@ -116,7 +118,7 @@ def validate(epoch, encoder, decoder, cross_entropy_loss, data_loader, word_dict
     references = []
     hypotheses = []
     with torch.no_grad():
-        for batch_idx, (imgs, captions, all_captions) in enumerate(data_loader):
+        for batch_idx, (imgs, captions, all_captions) in tqdm(enumerate(data_loader)):
             imgs, captions = Variable(imgs).cuda(), Variable(captions).cuda()
             img_features = encoder(imgs)
             preds, alphas = decoder(img_features, captions)
@@ -180,7 +182,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Show, Attend and Tell')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='batch size for training (default: 64)')
-    parser.add_argument('--epochs', type=int, default=10, metavar='E',
+    parser.add_argument('--epochs', type=int, default=2, metavar='E',
                         help='number of epochs to train for (default: 10)')
     parser.add_argument('--lr', type=float, default=1e-4, metavar='LR',
                         help='learning rate of the decoder (default: 1e-4)')
@@ -192,9 +194,9 @@ if __name__ == "__main__":
                         help='number of batches to wait before logging training stats (default: 100)')
     parser.add_argument('--data', type=str, default='data/coco',
                         help='path to data images (default: data/coco)')
-    parser.add_argument('--network', choices=['vgg19', 'resnet152', 'densenet161'], default='vgg19',
+    parser.add_argument('--network', choices=['vgg19', 'resnet152', 'densenet161'], default='resnet152',
                         help='Network to use in the encoder (default: vgg19)')
-    parser.add_argument('--model', type=str, help='path to model')
+    parser.add_argument('--model', type=str, help='path to model', default='./model/model_resnet152_10.pth')
     parser.add_argument('--tf', action='store_true', default=False,
                         help='Use teacher forcing when training LSTM (default: False)')
 
